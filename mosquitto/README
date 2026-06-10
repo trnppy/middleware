@@ -1,0 +1,122 @@
+https://mosquitto.org/
+https://hub.docker.com/_/eclipse-mosquitto
+https://raw.githubusercontent.com/eclipse/mosquitto/master/mosquitto.conf
+
+Reference:
+https://www.switchdoc.com/2018/02/tutorial-installing-and-testing-mosquitto-mqtt-on-raspberry-pi/
+http://www.steves-internet-guide.com/mosquitto-tls/
+
+# setup on isolated dev13 using docker
+# - with token (8883) or certificates (8884) for authentication
+
+# setup persistent storage for mosquitto docker container 
+mkdir -p ~/storage/mosquitto/{log,config,data,certs}
+
+# mosquitto.conf
+cd ~/storage/mosquitto/config
+curl -s -o mosquitto.conf https://raw.githubusercontent.com/eclipse/mosquitto/master/mosquitto.conf
+
+# update mosquitto.conf with this content
+per_listener_settings true
+listener 8883
+certfile /mosquitto/certs/dev13-bundle.pem
+keyfile /mosquitto/certs/dev13-key.pem
+dhparamfile /mosquitto/certs/dev13-dhparam.pem
+cafile /mosquitto/certs/ca.pem
+persistence_location /mosquitto/data/
+allow_anonymous true
+#password_file /mosquitto/config/tokenfile
+include_dir /mosquitto/config/alt
+
+# create alt directory to hold 8884 config
+cd ~/storage/mosquitto/config
+mkdir alt
+cd ~/storage/mosquitto/config/alt
+
+# create 8884.conf with this content
+listener 8884
+certfile /mosquitto/certs/dev13-bundle.pem
+keyfile /mosquitto/certs/dev13-key.pem
+dhparamfile /mosquitto/certs/dev13-dhparam.pem
+require_certificate true
+cafile /mosquitto/certs/ca.pem
+allow_anonymous true
+
+# transfer ca.pem, dev13-bundle.pem, dev13-key.pem, dev13.pem, dev13-dhparam.pem to ~/storage/mosquitto/certs/
+chmod 0700 ~/mosquitto/certs/dev13-dhparam.pem
+
+## only if error running following docker command as non-sudo
+sudo usermod -aG docker $USER
+
+# start the broker container with openssl support, exposing port 8883 for token users and 8884 for certificate users
+docker run -d --name eclipse-broker -p 8884:8884 -p 8883:8883 -p 9001:9001 -v ~/storage/mosquitto/config:/mosquitto/config -v ~/storage/mosquitto/data:/mosquitto/data -v ~/storage/mosquitto/log:/mosquitto/log -v ~/storage/mosquitto/certs:/mosquitto/certs eclipse-mosquitto:openssl
+
+# watch log
+docker logs eclipse-broker --follow
+
+1780782282: Loading config file /mosquitto/config/alt/8884.conf
+1780782282: mosquitto version 2.0.22 starting
+1780782282: Config loaded from /mosquitto/config/mosquitto.conf.
+1780782282: Opening ipv4 listen socket on port 8883.
+1780782282: Opening ipv6 listen socket on port 8883.
+1780782282: Opening ipv4 listen socket on port 8884.
+1780782282: Opening ipv6 listen socket on port 8884.
+1780782282: mosquitto version 2.0.22 running
+
+# create password_file in /mosquitto/config/tokenfile/ with mosquitto_passwd command
+
+# first create a token; for example
+openssl rand -hex 20
+# example output: ed4139da17aacacac18c6cd10b7e7b8024e9c892
+
+# run mosquitto_passwd passing token filename, username and token
+# only pass "-c" the first time, otherwise will overwrite existing file
+docker exec -ti eclipse-broker sh
+cd /mosquitto/config
+# /mosquitto/config # mosquitto_passwd -c -b tokenfile USER99 ed4139da17aacacac18c6cd10b7e7b8024e9c892
+## uncomment password_file in mosquitto.conf before exiting
+# exit
+
+# restart eclipse-broker
+docker stop eclipse-broker
+docker start eclipse-broker
+
+# watch log
+docker logs eclipse-broker
+
+1780782444: mosquitto version 2.0.22 terminating
+1780782451: Loading config file /mosquitto/config/alt/8884.conf
+1780782451: mosquitto version 2.0.22 starting
+1780782451: Config loaded from /mosquitto/config/mosquitto.conf.
+1780782451: Opening ipv4 listen socket on port 8883.
+1780782451: Opening ipv6 listen socket on port 8883.
+1780782451: Opening ipv4 listen socket on port 8884.
+1780782451: Opening ipv6 listen socket on port 8884.
+1780782451: mosquitto version 2.0.22 running
+
+# start the client using the container with openssl support
+docker run -d --name eclipse-client --add-host=dev13.local:host-gateway -v ~/storage/mosquitto/certs:/mosquitto/certs eclipse-mosquitto:openssl
+
+## try it out
+docker exec -ti eclipse-client sh
+
+mosquitto_pub -h dev13.local -p 8884 -d --cafile /mosquitto/certs/ca.pem --cert /mosquitto/certs/dev13.pem --key /mosquitto/certs/dev13-key.pem --tls-version tlsv1.3 -t hello/world -m "test"
+Client null sending CONNECT
+Client null received CONNACK (0)
+Client null sending PUBLISH (d0, q0, r0, m1, 'hello/world', ... (4 bytes))
+Client null sending DISCONNECT
+
+mosquitto_pub -h dev13.local -p 8883 -d --cafile /mosquitto/certs/ca.pem -u USER99 -P ed4139da17aacacac18c6cd10b7e7b8024e9c892 --tls-version tlsv1.3 -t hello/world -m "test"
+Client null sending CONNECT
+Client null received CONNACK (0)
+Client null sending PUBLISH (d0, q0, r0, m1, 'hello/world', ... (4 bytes))
+Client null sending DISCONNECT
+
+In the eclipse-broker logs:
+1780783093: New connection from 172.17.0.1:35584 on port 8884.
+1780783093: New client connected from 172.17.0.1:35584 as auto-C1C66693-78E8-7A4E-DA9D-01E3C60CBAB7 (p2, c1, k60).
+1780783093: Client auto-C1C66693-78E8-7A4E-DA9D-01E3C60CBAB7 disconnected.
+1780783346: New connection from 172.17.0.1:32788 on port 8883.
+1780783346: New client connected from 172.17.0.1:32788 as auto-72DE9038-CF7E-5C41-2D08-6BFAB2A9F308 (p2, c1, k60, u'USER99').
+1780783346: Client auto-72DE9038-CF7E-5C41-2D08-6BFAB2A9F308 disconnected.
+
