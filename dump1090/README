@@ -1,0 +1,55 @@
+!!Use at your own risk!!
+
+ADS-B Aircraft Tracking
+
+Ubuntu 24.04.4
+Docker 29.3.1
+RTL-SDR v3
+
+Install Dependencies
+sudo apt update
+sudo apt install -y git cmake libusb-1.0-0-dev pkg-config
+
+Blacklist the default TV drivers
+echo 'blacklist rtl2832' | sudo tee /etc/modprobe.d/blacklist-rtl.conf
+echo 'blacklist rtl2832_sdr' | sudo tee -a /etc/modprobe.d/blacklist-rtl.conf
+echo 'blacklist dvb_usb_rtl28xxu' | sudo tee -a /etc/modprobe.d/blacklist-rtl.conf
+sudo modprobe -r dvb_usb_rtl28xxu
+
+If last command returns busy either reboot or do cleanup with rmmod
+sudo lsmod | egrep rtl
+rtl2832_sdr            45056  0
+videobuf2_vmalloc      20480  1 rtl2832_sdr
+videobuf2_v4l2         36864  1 rtl2832_sdr
+videobuf2_common       81920  4 rtl2832_sdr,videobuf2_vmalloc,videobuf2_v4l2,videobuf2_memops
+rtl2832                32768  1
+i2c_mux                12288  1 rtl2832
+dvb_usb_rtl28xxu       45056  1
+dvb_usb_v2             53248  1 dvb_usb_rtl28xxu
+rc_core                73728  4 dvb_usb_v2,dvb_usb_rtl28xxu,cec
+videodev              352256  5 v4l2_async,rtl2832_sdr,v4l2_fwnode,videobuf2_v4l2,ov13858
+
+Install dump1090-fa (FlightAware version):
+docker run --rm -d \
+    --device /dev/bus/usb \
+    --restart unless-stopped \
+    --name dump1090 \
+    -p 8080:8080 \
+    jraviles/dump1090:latest
+
+docker logs dump1090
+Wed Jun 17 23:38:21 2026 UTC  dump1090-fa unknown starting up.
+rtlsdr: using device #0: Generic RTL2832U OEM (Realtek, RTL2838UHIDIR, SN 00000001)
+Found Rafael Micro R820T tuner
+rtlsdr: tuner gain set to 49.6 dB (gain step 28)
+
+Access the Local Data Feed
+http://localhost:8080
+If you see a map with planes, your hardware and software are working correctly!
+
+curl -s http://localhost:8080/data/aircraft.json | head -c 200
+{ "now" : 1781818726.1,
+  "messages" : 4782189,
+  "aircraft" : [
+    {"hex":"ac6e51","gs":416.5,"track":35.5,"geom_rate":0,"version":0,"nac_v":1,"mlat":[],"tisb":[],"messages":6,"seen":0.5,"rssi":-34.devops@dev13:~/src/middleware/dump1090$ 
+
