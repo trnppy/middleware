@@ -1,0 +1,8 @@
+
+docker run -d \
+  --name nginx-server \
+  --restart=always \
+  -p 9080:80 \
+  -v ~/storage/qemu-9080/htdocs:/usr/share/nginx/html:ro \
+  nginx:alpine
+
