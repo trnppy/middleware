@@ -49,7 +49,7 @@ chmod 0700 ~/mosquitto/certs/dev13-dhparam.pem
 sudo usermod -aG docker $USER
 
 # start the broker container with openssl support, exposing port 8883 for token users and 8884 for certificate users
-docker run -d --name eclipse-broker -p 8884:8884 -p 8883:8883 -p 9001:9001 -v ~/storage/mosquitto/config:/mosquitto/config -v ~/storage/mosquitto/data:/mosquitto/data -v ~/storage/mosquitto/log:/mosquitto/log -v ~/storage/mosquitto/certs:/mosquitto/certs eclipse-mosquitto:openssl
+docker run -d --name eclipse-broker --restart unless-stopped -p 8884:8884 -p 8883:8883 -p 9001:9001 -v ~/storage/mosquitto/config:/mosquitto/config -v ~/storage/mosquitto/data:/mosquitto/data -v ~/storage/mosquitto/log:/mosquitto/log -v ~/storage/mosquitto/certs:/mosquitto/certs eclipse-mosquitto:openssl
 
 # watch log
 docker logs eclipse-broker --follow
@@ -95,7 +95,7 @@ docker logs eclipse-broker
 1780782451: mosquitto version 2.0.22 running
 
 # start the client using the container with openssl support
-docker run -d --name eclipse-client --add-host=dev13.local:host-gateway -v ~/storage/mosquitto/certs:/mosquitto/certs eclipse-mosquitto:openssl
+docker run -d --name eclipse-client --restart unless-stopped --add-host=dev13.local:host-gateway -v ~/storage/mosquitto/certs:/mosquitto/certs eclipse-mosquitto:openssl
 
 ## try it out
 docker exec -ti eclipse-client sh
